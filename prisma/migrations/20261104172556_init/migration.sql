@@ -5,7 +5,7 @@ CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'PROCESSING', 'DELIVERED', 'CANCEL
 CREATE TABLE "Order" (
     "id" TEXT NOT NULL,
     "totalAmount" DOUBLE PRECISION NOT NULL,
-    "totalItem" INTEGER NOT NULL,
+    "totalItems" INTEGER NOT NULL,
     "status" "OrderStatus" NOT NULL,
     "paid" BOOLEAN NOT NULL DEFAULT false,
     "paidAt" TIMESTAMP(3),
