@@ -7,6 +7,12 @@ import { ChangeOrderStatusDto } from './dto/change-order-status.dto';
 import { PRODUCT_SERVICE } from 'src/config/service';
 import { firstValueFrom } from 'rxjs';
 
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -15,11 +21,80 @@ export class OrdersService {
   ) {}
   async create(createOrderDto: CreateOrderDto) {
     try {
+      //Confirmar que los productos existen
       const productIds = createOrderDto.items.map((item) => item.productId);
-      const products: any[] = await firstValueFrom(
-        this.productsClient.send({ cmd: 'validateProducts' }, productIds),
+      const products = await firstValueFrom(
+        this.productsClient.send<Product[]>(
+          { cmd: 'validateProducts' },
+          productIds,
+        ),
       );
+      const productsById = new Map(
+        products.map((product) => [product.id, product] as const),
+      );
+
+      //funcion auxiliar: devolver un producto o lanzar un error
+      const getProduct = (productId: number): Product => {
+        const product = productsById.get(productId);
+        if (!product) {
+          throw new RpcException({
+            status: HttpStatus.BAD_REQUEST,
+            message: `Product ${productId} not found`,
+          });
+        }
+        return product;
+      };
+      //*Calculo de los totales
+      const totalAmount = createOrderDto.items.reduce(
+        (accumulate, orderItem) =>
+          accumulate +
+          getProduct(orderItem.productId).price * orderItem.quantity,
+        0,
+      );
+      const totalItems = createOrderDto.items.reduce(
+        (accumulate, orderItem) => accumulate + orderItem.quantity,
+        0,
+      );
+      //* Guardar la orden con sus items
+      const order = await this.prisma.order.create({
+        data: {
+          totalAmount,
+          totalItems,
+          orderItems: {
+            createMany: {
+              data: createOrderDto.items.map((orderItem) => ({
+                price: getProduct(orderItem.productId).price,
+                productId: orderItem.productId,
+                quantity: orderItem.quantity,
+              })),
+            },
+          },
+        },
+        include: {
+          orderItems: {
+            select: {
+              price: true,
+              quantity: true,
+              productId: true,
+            },
+          },
+        },
+      });
+      //*Armar la respuesta
+      return {
+        ...order,
+        orderItems: order.orderItems.map((orderItem) => ({
+          ...orderItem,
+          name: getProduct(orderItem.productId).name,
+        })),
+      };
     } catch (error) {
+      if (error instanceof RpcException) {
+        throw error;
+      }
+      if (typeof error == 'object' && error !== null) {
+        throw new RpcException(error);
+      }
       throw new RpcException({
         status: HttpStatus.BAD_REQUEST,
         message: 'Check logs',

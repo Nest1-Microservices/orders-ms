@@ -26,7 +26,7 @@ model Order {
   totalItems  Int
 
   status OrderStatus @default(PENDING)
-  paid   Boolean   @default(false)
+  paid   Boolean     @default(false)
   paidAt DateTime?
 
   createdAt  DateTime    @default(now())
